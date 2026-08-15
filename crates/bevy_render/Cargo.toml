@@ -117,6 +117,9 @@ itertools = "0.14"
 weak-table = "0.3"
 tracing = "0.1"
 static_assertions = "1"
+raw-window-handle = { version = "0.6", features = [
+  "alloc",
+], default-features = false }
 
 [dev-dependencies]
 proptest = "1"

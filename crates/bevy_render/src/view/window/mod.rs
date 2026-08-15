@@ -12,7 +12,8 @@ use bevy_ecs::system::RunSystemOnce;
 use bevy_log::{debug, info, warn};
 use bevy_utils::default;
 use bevy_window::{
-    CompositeAlphaMode, PresentMode, PrimaryWindow, RawHandleWrapper, Window, WindowClosing,
+    CompositeAlphaMode, PresentMode, PrimaryWindow, RawDisplayHandleWrapper, RawHandleWrapper,
+    Window, WindowClosing,
 };
 use core::num::NonZero;
 use wgpu::{
@@ -350,6 +351,7 @@ const DEFAULT_DESIRED_MAXIMUM_FRAME_LATENCY: u32 = 2;
 /// Creates window surfaces.
 pub fn create_surfaces(
     mut commands: Commands,
+    display: Res<RawDisplayHandleWrapper>,
     // By accessing a NonSend resource, we tell the scheduler to put this system on the main thread,
     // which is necessary for some OS's
     #[cfg(any(target_os = "macos", target_os = "ios"))] _marker: bevy_ecs::system::NonSendMarker,
@@ -366,7 +368,7 @@ pub fn create_surfaces(
     for (entity, mut window, handle, mut maybe_surface_data) in &mut windows {
         let Some(data) = maybe_surface_data.as_mut() else {
             let surface_target = SurfaceTargetUnsafe::RawHandle {
-                raw_display_handle: Some(handle.get_display_handle()),
+                raw_display_handle: Some(display.get_display_handle()),
                 raw_window_handle: handle.get_window_handle(),
             };
             // SAFETY: The window handles in ExtractedWindows will always be valid objects to create surfaces on

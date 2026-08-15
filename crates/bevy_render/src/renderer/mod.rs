@@ -24,7 +24,14 @@ use bevy_ecs::{prelude::*, system::SystemState};
 use bevy_log::info_span;
 use bevy_log::{debug, info, warn};
 use bevy_render::camera::ExtractedCamera;
-use bevy_window::RawHandleWrapperHolder;
+use bevy_window::{
+    RawDisplayHandleWrapper,
+    RawHandleWrapperHolder,
+    ThreadLockedRawWindowHandleWrapper,
+};
+use raw_window_handle::{
+    DisplayHandle, HandleError, HasDisplayHandle, HasWindowHandle, WindowHandle,
+};
 use wgpu::{
     Adapter, AdapterInfo, Backends, DeviceType, ForceShaderModelToken, Instance, Queue,
     RequestAdapterOptions, Trace,
@@ -198,6 +205,7 @@ async fn find_adapter_by_name(
 pub async fn initialize_renderer(
     backends: Backends,
     primary_window: Option<RawHandleWrapperHolder>,
+    display: RawDisplayHandleWrapper,
     options: &WgpuSettings,
     #[cfg(feature = "raw_vulkan_init")]
     raw_vulkan_init_settings: raw_vulkan_init::RawVulkanInitSettings,
@@ -206,7 +214,7 @@ pub async fn initialize_renderer(
         backends,
         flags: options.instance_flags,
         memory_budget_thresholds: options.instance_memory_budget_thresholds,
-        display: None,
+        display: Some(Box::new(display.clone())),
         backend_options: wgpu::BackendOptions {
             gl: wgpu::GlBackendOptions {
                 gles_minor_version: options.gles3_minor_version,
@@ -247,9 +255,33 @@ pub async fn initialize_renderer(
         if let Some(wrapper) = maybe_handle.as_ref() {
             // SAFETY: Plugins should be set up on the main thread.
             let handle = unsafe { wrapper.get_handle() };
+
+            /// `wgpu` currently requires the window and display handles to be
+            /// supplied by the same type, even though they are logically
+            /// independent.
+            struct WgpuSurfaceHandle {
+                display: RawDisplayHandleWrapper,
+                window: ThreadLockedRawWindowHandleWrapper,
+            }
+
+            impl HasDisplayHandle for WgpuSurfaceHandle {
+                fn display_handle(&self) -> Result<DisplayHandle<'_>, HandleError> {
+                    self.display.display_handle()
+                }
+            }
+
+            impl HasWindowHandle for WgpuSurfaceHandle {
+                fn window_handle(&self) -> Result<WindowHandle<'_>, HandleError> {
+                    self.window.window_handle()
+                }
+            }
+
             Some(
                 instance
-                    .create_surface(handle)
+                    .create_surface(WgpuSurfaceHandle {
+                        display: display.clone(),
+                        window: handle,
+                    })
                     .expect("Failed to create wgpu surface"),
             )
         } else {
